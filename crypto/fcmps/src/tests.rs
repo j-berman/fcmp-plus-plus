@@ -721,3 +721,80 @@ fn proof_sizes() {
     );
   }
 }
+
+fn flamegraph_prove(params: &FcmpParams<MoneroCurves>, blinded_branches: BranchesWithBlinds<MoneroCurves>) -> Fcmp<MoneroCurves> {
+  Fcmp::prove(&mut OsRng, &params, blinded_branches).unwrap()
+}
+
+fn flamegraph_verify(params: &FcmpParams<MoneroCurves>, all_proofs: Vec<(TreeRoot<Selene, Helios>, usize, Vec<Input<<Selene as Ciphersuite>::F>>, Fcmp<MoneroCurves>)>) -> bool {
+  // verify 1000 times
+  for _ in 0..1000 {
+    let mut verifier_1 = generalized_bulletproofs::Generators::batch_verifier();
+    let mut verifier_2 = generalized_bulletproofs::Generators::batch_verifier();
+
+    for (root, layers, inputs, proof) in &all_proofs {
+      proof
+        .verify(&mut OsRng, &mut verifier_1, &mut verifier_2, &params, *root, *layers, &inputs)
+        .unwrap();
+    }
+
+    if !params.curve_1_generators.verify(verifier_1) || !params.curve_2_generators.verify(verifier_2) {
+      return false
+    }
+  }
+
+  true
+}
+
+#[test]
+fn flamegraph_hash_grow() {
+  let (_, _, _, _, params) = random_params(8);
+
+  let mut random_leaves = vec![];
+  for _ in 0 .. LAYER_ONE_LEN * 3 {
+    random_leaves.push(<Selene as Ciphersuite>::F::random(&mut OsRng));
+  }
+
+  // Repeat 10000 times
+  for _ in 0..10000 {
+    let _ = hash_grow(
+      &params.curve_1_generators,
+      params.curve_1_hash_init,
+      0,
+      <Selene as Ciphersuite>::F::ZERO,
+      &random_leaves,
+    )
+    .unwrap();
+  }
+}
+
+#[test]
+fn flamegraph_prove_and_verify() {
+  let (G, T, U, V, params) = random_params(8);
+
+  let mut all_proofs = vec![];
+
+  let n_paths = LAYER_ONE_LEN.min(LAYER_TWO_LEN);
+  let n_layers = 5;
+  let (paths, root) = random_paths(&params, n_layers, n_paths);
+
+  let mut output_blinds = vec![];
+  for _ in 0 .. paths.len() {
+    output_blinds.push(random_output_blinds(G, T, U, V));
+  }
+
+  let mut inputs = vec![];
+  for (path, output_blinds) in paths.iter().zip(&output_blinds) {
+    inputs.push(output_blinds.blind(&path.output).unwrap());
+  }
+
+  let branches = Branches::new(paths).unwrap();
+  let blinded_branches = blind_branches(&params, branches, output_blinds);
+
+  let proof = flamegraph_prove(&params, blinded_branches);
+
+  all_proofs.push((root, n_layers, inputs.clone(), proof.clone()));
+
+  // Test batch verification of all of these proofs
+  assert!(flamegraph_verify(&params, all_proofs));
+}
