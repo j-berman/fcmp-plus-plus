@@ -722,28 +722,32 @@ fn proof_sizes() {
   }
 }
 
-fn flamegraph_prove(params: &FcmpParams<MoneroCurves>, blinded_branches: BranchesWithBlinds<MoneroCurves>) -> Fcmp<MoneroCurves> {
+fn flamegraph_prove_inner(
+  params: &FcmpParams<MoneroCurves>,
+  blinded_branches: BranchesWithBlinds<MoneroCurves>,
+) -> Fcmp<MoneroCurves> {
   Fcmp::prove(&mut OsRng, &params, blinded_branches).unwrap()
 }
 
-fn flamegraph_verify(params: &FcmpParams<MoneroCurves>, all_proofs: Vec<(TreeRoot<Selene, Helios>, usize, Vec<Input<<Selene as Ciphersuite>::F>>, Fcmp<MoneroCurves>)>) -> bool {
-  // verify 1000 times
-  for _ in 0..1000 {
-    let mut verifier_1 = generalized_bulletproofs::Generators::batch_verifier();
-    let mut verifier_2 = generalized_bulletproofs::Generators::batch_verifier();
+fn flamegraph_verify_inner(
+  params: &FcmpParams<MoneroCurves>,
+  all_proofs: &Vec<(
+    TreeRoot<Selene, Helios>,
+    usize,
+    Vec<Input<<Selene as Ciphersuite>::F>>,
+    Fcmp<MoneroCurves>,
+  )>,
+) -> bool {
+  let mut verifier_1 = generalized_bulletproofs::Generators::batch_verifier();
+  let mut verifier_2 = generalized_bulletproofs::Generators::batch_verifier();
 
-    for (root, layers, inputs, proof) in &all_proofs {
-      proof
-        .verify(&mut OsRng, &mut verifier_1, &mut verifier_2, &params, *root, *layers, &inputs)
-        .unwrap();
-    }
-
-    if !params.curve_1_generators.verify(verifier_1) || !params.curve_2_generators.verify(verifier_2) {
-      return false
-    }
+  for (root, layers, inputs, proof) in all_proofs {
+    proof
+      .verify(&mut OsRng, &mut verifier_1, &mut verifier_2, &params, *root, *layers, &inputs)
+      .unwrap();
   }
 
-  true
+  params.curve_1_generators.verify(verifier_1) && params.curve_2_generators.verify(verifier_2)
 }
 
 #[test]
@@ -751,7 +755,7 @@ fn flamegraph_hash_grow() {
   let (_, _, _, _, params) = random_params(8);
 
   let mut random_leaves = vec![];
-  for _ in 0 .. LAYER_ONE_LEN * 3 {
+  for _ in 0..LAYER_ONE_LEN * 3 {
     random_leaves.push(<Selene as Ciphersuite>::F::random(&mut OsRng));
   }
 
@@ -768,18 +772,33 @@ fn flamegraph_hash_grow() {
   }
 }
 
-#[test]
-fn flamegraph_prove_and_verify() {
-  let (G, T, U, V, params) = random_params(8);
+struct EdGenerators(
+  <Ed25519 as Ciphersuite>::G,
+  <Ed25519 as Ciphersuite>::G,
+  <Ed25519 as Ciphersuite>::G,
+  <Ed25519 as Ciphersuite>::G,
+);
 
-  let mut all_proofs = vec![];
+fn add_proof(
+  ed_generators: &EdGenerators,
+  params: &FcmpParams<MoneroCurves>,
+  n_layers: usize,
+  n_outputs: usize,
+  all_proofs: &mut Vec<(
+    TreeRoot<Selene, Helios>,
+    usize,
+    Vec<Input<<Selene as Ciphersuite>::F>>,
+    Fcmp<MoneroCurves>,
+  )>,
+) {
+  assert_ne!(n_layers, 0);
+  assert_ne!(n_outputs, 0);
 
-  let n_paths = LAYER_ONE_LEN.min(LAYER_TWO_LEN);
-  let n_layers = 5;
-  let (paths, root) = random_paths(&params, n_layers, n_paths);
+  let (paths, root) = random_paths(&params, n_layers, n_outputs);
 
+  let (G, T, U, V) = (ed_generators.0, ed_generators.1, ed_generators.2, ed_generators.3);
   let mut output_blinds = vec![];
-  for _ in 0 .. paths.len() {
+  for _ in 0..n_outputs {
     output_blinds.push(random_output_blinds(G, T, U, V));
   }
 
@@ -791,10 +810,50 @@ fn flamegraph_prove_and_verify() {
   let branches = Branches::new(paths).unwrap();
   let blinded_branches = blind_branches(&params, branches, output_blinds);
 
-  let proof = flamegraph_prove(&params, blinded_branches);
+  let proof = flamegraph_prove_inner(&params, blinded_branches);
 
   all_proofs.push((root, n_layers, inputs.clone(), proof.clone()));
+}
 
-  // Test batch verification of all of these proofs
-  assert!(flamegraph_verify(&params, all_proofs));
+#[test]
+fn flamegraph_prove() {
+  let (G, T, U, V, params) = random_params(8);
+  let ed_generators = EdGenerators(G, T, U, V);
+
+  let n_layers = 5;
+  let n_outputs = 2;
+
+  let mut all_proofs = vec![];
+
+  add_proof(&ed_generators, &params, n_layers, n_outputs, &mut all_proofs);
+}
+
+#[test]
+fn flamegraph_verify() {
+  let (G, T, U, V, params) = random_params(8);
+  let ed_generators = EdGenerators(G, T, U, V);
+
+  let n_layers = 5;
+  let n_outputs_per_tx = 2;
+  let n_txs = 10;
+  let mut n_outputs = n_outputs_per_tx * n_txs;
+
+  let mut all_proofs = vec![];
+
+  for i in 0..n_txs {
+    println!("Constructing proof {}", i+1);
+    let n_outputs_in_tx = n_outputs_per_tx.min(n_outputs);
+    add_proof(&ed_generators, &params, n_layers, n_outputs_in_tx, &mut all_proofs);
+    n_outputs -= n_outputs_in_tx;
+  }
+
+  // Test batch verification of all of these proofs, 3000 times (to heavily discount the effect of prove)
+  println!("Verifying");
+  for i in 0..3000 {
+    if i > 0 && i % 100 == 0 {
+      println!("Verify iter {}", i);
+    }
+
+    assert!(flamegraph_verify_inner(&params, &all_proofs));
+  }
 }
