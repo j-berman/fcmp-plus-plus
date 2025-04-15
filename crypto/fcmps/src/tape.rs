@@ -60,28 +60,39 @@ impl<F: Zeroize + PrimeFieldBits> VectorCommitmentTape<F> {
   ) -> Vec<Variable> {
     // Make sure we're at the start of a commitment as this needs its own dedicated commitment
     assert_eq!(self.current_j_offset, 0);
+    assert!(branch_len != 0);
+    assert!(branch_len <= self.commitment_len);
+    let words_in_branch = (branch_len + (COMMITMENT_WORD_LEN - 1)) / COMMITMENT_WORD_LEN;
 
+    // An empty vector commitment of the word length
     let empty = branch.as_ref().map(|_| vec![F::ZERO; COMMITMENT_WORD_LEN]);
 
     let branch = branch.map(|mut branch| {
       assert_eq!(branch_len, branch.len());
-      assert!(branch.len() <= COMMITMENT_WORD_LEN);
 
       // Pad the branch
-      while branch.len() < COMMITMENT_WORD_LEN {
+      while (branch.len() % COMMITMENT_WORD_LEN) != 0 {
         branch.push(F::ZERO);
       }
       branch
     });
 
-    let mut branch = self.append(branch);
+    // Append each chunk of the branch
+    let mut branch_variables = Vec::with_capacity(branch_len);
+    for b in 0 .. words_in_branch {
+      branch_variables.extend(&self.append(branch.as_ref().map(|branch| {
+        branch[(b * COMMITMENT_WORD_LEN) .. ((b + 1) * COMMITMENT_WORD_LEN)].to_vec()
+      })));
+    }
+    // Truncate any padding we created a variable for
+    branch_variables.truncate(branch_len);
 
-    // Append empty dummies so this hash doesn't have more variables added
-    for _ in 1 .. (self.commitment_len / COMMITMENT_WORD_LEN) {
+    // Append padding to this vector commitment so nothing else is added to this
+    for _ in words_in_branch .. (self.commitment_len / COMMITMENT_WORD_LEN) {
       self.append(empty.clone());
     }
-    branch.truncate(branch_len);
-    branch
+
+    branch_variables
   }
 
   /// Append a discrete logarithm of up to 255 coefficients, allowing usage of the extra slot for

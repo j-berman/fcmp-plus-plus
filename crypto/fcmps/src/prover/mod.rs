@@ -272,13 +272,12 @@ where
       let mut flattened_leaves = vec![];
       for leaf in leaves {
         // leaf is of type Output which checks its members to not be the identity
-        flattened_leaves.extend(&[
-          <C::OC as Ciphersuite>::G::to_xy(leaf.O).unwrap().0,
-          <C::OC as Ciphersuite>::G::to_xy(leaf.I).unwrap().0,
-          <C::OC as Ciphersuite>::G::to_xy(leaf.C).unwrap().0,
-        ]);
+        let O = <C::OC as Ciphersuite>::G::to_xy(leaf.O).unwrap();
+        let I = <C::OC as Ciphersuite>::G::to_xy(leaf.I).unwrap();
+        let C = <C::OC as Ciphersuite>::G::to_xy(leaf.C).unwrap();
+        flattened_leaves.extend(&[O.0, O.1, I.0, I.1, C.0, C.1]);
       }
-      while flattened_leaves.len() < (3 * LAYER_ONE_LEN) {
+      while flattened_leaves.len() < (6 * LAYER_ONE_LEN) {
         flattened_leaves.push(<C::C1 as Ciphersuite>::F::ZERO);
       }
       flattened_leaves
@@ -290,7 +289,7 @@ where
       let mut c2 = vec![];
       if let Some(leaves) = &input.branches.leaves {
         let flattened_leaves = flatten_leaves(leaves);
-        c1.push(c1_tape.append_branch(3 * LAYER_ONE_LEN, Some(flattened_leaves)));
+        c1.push(c1_tape.append_branch(6 * LAYER_ONE_LEN, Some(flattened_leaves)));
       }
       for branch in &input.branches.curve_1_layers {
         let mut branch = branch.clone();

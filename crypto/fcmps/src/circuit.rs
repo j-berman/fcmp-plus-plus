@@ -138,7 +138,7 @@ impl<C: Ciphersuite> Circuit<C> {
     let c_blind = self.discrete_log(curve, c_blind, &challenge, &challenged_G);
     self.incomplete_add_pub(C_tilde, c_blind, C);
 
-    self.tuple_member_of_list(transcript, vec![O.x(), I.x(), C.x()], branch);
+    self.tuple_member_of_list(transcript, vec![O.x(), O.y(), I.x(), I.y(), C.x(), C.y()], branch);
   }
 
   pub(crate) fn additional_layer_discrete_log_challenge<

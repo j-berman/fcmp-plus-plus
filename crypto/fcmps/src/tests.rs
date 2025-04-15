@@ -100,11 +100,10 @@ fn random_path(
     for (scalar, point) in leaves
       .iter()
       .flat_map(|output| {
-        [
-          <Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap().0,
-          <Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap().0,
-          <Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap().0,
-        ]
+        let O = <Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap();
+        let I = <Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap();
+        let C = <Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap();
+        [O.0, O.1, I.0, I.1, C.0, C.1]
       })
       .zip(params.curve_1_generators.g_bold_slice())
     {
@@ -222,9 +221,10 @@ fn random_paths(
 
     let mut new_leaves_layer = vec![];
     for output in shuffled_outputs {
-      new_leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap().0);
-      new_leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap().0);
-      new_leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap().0);
+      let O = <Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap();
+      let I = <Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap();
+      let C = <Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap();
+      new_leaves_layer.extend(&[O.0, O.1, I.0, I.1, C.0, C.1]);
     }
 
     TreeRoot::C1(
@@ -253,9 +253,10 @@ fn random_paths(
         } else {
           let mut leaves_layer = vec![];
           for output in &path.leaves {
-            leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap().0);
-            leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap().0);
-            leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap().0);
+            let O = <Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap();
+            let I = <Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap();
+            let C = <Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap();
+            leaves_layer.extend(&[O.0, O.1, I.0, I.1, C.0, C.1]);
           }
 
           hash_grow(
@@ -344,9 +345,10 @@ fn random_paths(
 
     let mut leaves_layer = vec![];
     for output in &path.leaves {
-      leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap().0);
-      leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap().0);
-      leaves_layer.push(<Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap().0);
+      let O = <Ed25519 as Ciphersuite>::G::to_xy(output.O).unwrap();
+      let I = <Ed25519 as Ciphersuite>::G::to_xy(output.I).unwrap();
+      let C = <Ed25519 as Ciphersuite>::G::to_xy(output.C).unwrap();
+      leaves_layer.extend(&[O.0, O.1, I.0, I.1, C.0, C.1]);
     }
 
     let mut c1_hash = Some(

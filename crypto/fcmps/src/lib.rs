@@ -53,7 +53,7 @@ mod tests;
 
 /// The length of branches proved for on the first layer.
 ///
-/// The leaves layer is thrice as wide.
+/// The leaves' layer is six times as wide.
 pub const LAYER_ONE_LEN: usize = 38;
 /// The length of branches proved for on the second layer.
 pub const LAYER_TWO_LEN: usize = 18;
@@ -247,22 +247,22 @@ where
     };
     let mut c2_branches = Vec::with_capacity(layers / 2);
 
-    // We use 0 for `append_branch` as the amount of commitments effected is constant to the size
-    // of the branch
     for _ in 0 .. inputs {
       for i in 0 .. (layers - 1) {
         if (i % 2) == 0 {
-          c1_branches.push(c1_tape.append_branch(0, None));
+          c1_branches.push(
+            c1_tape.append_branch(if i == 0 { 6 * LAYER_ONE_LEN } else { LAYER_ONE_LEN }, None),
+          );
         } else {
-          c2_branches.push(c2_tape.append_branch(0, None));
+          c2_branches.push(c2_tape.append_branch(LAYER_TWO_LEN, None));
         }
       }
     }
 
     if (layers % 2) == 1 {
-      c1_tape.append_branch(0, None);
+      c1_tape.append_branch(if layers == 1 { 6 * LAYER_ONE_LEN } else { LAYER_ONE_LEN }, None);
     } else {
-      c2_tape.append_branch(0, None);
+      c2_tape.append_branch(LAYER_TWO_LEN, None);
     }
 
     for _ in 0 .. inputs {
@@ -405,9 +405,9 @@ where
       // If the leaves are the only layer, the root branch is the leaves
       // Else, the first C1 branch is the leaves
       (if layers == 1 { root.clone() } else { c1_branches.next().unwrap() })
-        .chunks(3)
+        .chunks(6)
         .map(|chunk| {
-          assert_eq!(chunk.len(), 3);
+          assert_eq!(chunk.len(), 6);
           chunk.to_vec()
         })
         .collect(),
@@ -539,11 +539,10 @@ where
         for (scalar, point) in leaves
           .iter()
           .flat_map(|output| {
-            [
-              <C::OC as Ciphersuite>::G::to_xy(output.O).unwrap().0,
-              <C::OC as Ciphersuite>::G::to_xy(output.I).unwrap().0,
-              <C::OC as Ciphersuite>::G::to_xy(output.C).unwrap().0,
-            ]
+            let O = <C::OC as Ciphersuite>::G::to_xy(output.O).unwrap();
+            let I = <C::OC as Ciphersuite>::G::to_xy(output.I).unwrap();
+            let C = <C::OC as Ciphersuite>::G::to_xy(output.C).unwrap();
+            [O.0, O.1, I.0, I.1, C.0, C.1]
           })
           .zip(params.curve_1_generators.g_bold_slice())
         {
@@ -801,7 +800,7 @@ where
       for i in 0 .. (layers - 1) {
         if (i % 2) == 0 {
           c1_branches.push(
-            c1_tape.append_branch(if i == 0 { 3 * LAYER_ONE_LEN } else { LAYER_ONE_LEN }, None),
+            c1_tape.append_branch(if i == 0 { 6 * LAYER_ONE_LEN } else { LAYER_ONE_LEN }, None),
           );
         } else {
           c2_branches.push(c2_tape.append_branch(LAYER_TWO_LEN, None));
@@ -811,7 +810,7 @@ where
 
     // Append the root branch to the tape
     let root = if (layers % 2) == 1 {
-      c1_tape.append_branch(if layers == 1 { 3 * LAYER_ONE_LEN } else { LAYER_ONE_LEN }, None)
+      c1_tape.append_branch(if layers == 1 { 6 * LAYER_ONE_LEN } else { LAYER_ONE_LEN }, None)
     } else {
       c2_tape.append_branch(LAYER_TWO_LEN, None)
     };
